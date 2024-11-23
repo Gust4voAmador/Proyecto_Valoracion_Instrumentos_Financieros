@@ -13,7 +13,7 @@ import os
 etfs = ['XLK', 'XLV', 'XLF', 'EFA', 'VNQ', 'ICLN', 'JNK', 'LQD', 'DBC', 'VWO']
 
 # Descargar los datos históricos de los ETFs
-etf_data10 = yf.download(etfs, start='2000-01-01')
+etf_data10 = yf.download(etfs, start='2010-01-01')
 
 # Obtener la ruta relativa para la carpeta 'data' en el directorio padre
 ruta_carpeta_data = os.path.join(os.path.dirname(__file__), os.pardir, 'data')
