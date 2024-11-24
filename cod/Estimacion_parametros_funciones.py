@@ -104,6 +104,50 @@ def maximizar_retorno(varianza_objetivo, media_anual, cov_anual):
     resultado = minimize(funcion_objetivo, w0, method='SLSQP', constraints=restricciones)
     return resultado.x
 
+def minimizar2(esperado, media_anual, cov_anual, corto, activos):
+    media_anual = media_anual.drop('Portafolio')
+    
+    def objetivo(pesos):
+        return np.dot(pesos.T, np.dot(cov_anual, pesos))
+
+    def rest_esperado(pesos):
+        return np.dot(pesos, media_anual) - esperado
+    
+    def rest_suma(pesos):
+        return np.sum(pesos) - 1
+
+    restricciones = (
+        {'type': 'eq', 'fun': rest_esperado},  
+        {'type': 'eq', 'fun': rest_suma},       
+    )  # Target return constraint
+
+    
+    if activos:
+        for indice, (cota_inf, cota_sup) in activos.items():
+            restricciones.append({'type': 'ineq', 'fun': lambda pesos, i=indice: pesos[i] - cota_inf})
+            if cota_sup is not None:
+                restricciones.append({'type': 'ineq', 'fun': lambda pesos, i=indice: cota_inf - pesos[i]})
+
+    # Set bounds for weights
+    if corto:
+        intervalo = [(-1, 1) for _ in range(len(media_anual))]  
+    else:
+        intervalo = [(0, 2) for _ in range(len(media_anual))]   
+
+    
+    iniciales = np.array([1 / len(media_anual)] * len(media_anual))
+
+    # Perform optimization
+    resultado = minimize(
+        objetivo,
+        iniciales,
+        method='SLSQP',
+        bounds=intervalo,
+        constraints=restricciones
+    )
+
+    return resultado.x
+    
 # %% Flujo principal
 def main():
     # Configuración
