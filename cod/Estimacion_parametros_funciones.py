@@ -7,7 +7,6 @@ Created on Sat Nov 23 19:06:25 2024
 
 import yfinance as yf
 import pandas as pd
-import os
 import numpy as np
 
 # %% Métodos
@@ -23,50 +22,41 @@ def calcular_rendimientos_diarios(etf_data):
     """
     r_diario = np.log(etf_data['Close'] / etf_data['Close'].shift(1))
     r_diario = pd.DataFrame(r_diario).dropna()  # Eliminar filas con valores NaN
+    r_diario['Portafolio'] = r_diario.sum(axis=1)
     return r_diario
 
-def agregar_informacion(r_diario):
+def media_diaria_retornos(r_diario):
     """
-    Agrega columnas con la suma del portafolio y el año a los rendimientos diarios.
+    A partir de un df de rendimientos calcula media de activos y el portafolio
     """
-    r_diario['portafolio'] = r_diario.sum(axis=1)
-    r_diario = r_diario.reset_index()  # Asegurar que 'Date' no es índice
-    r_diario['Date'] = pd.to_datetime(r_diario['Date'])  # Convertir a datetime
-    r_diario['Year'] = r_diario['Date'].dt.year  # Agregar columna con el año
-    return r_diario
+    media_diaria = r_diario.mean()
+    return media_diaria
 
 def calcular_media_anual(r_diario):
     """
     Calcula la media anual de los rendimientos diarios.
     """
-    media_r_diario = r_diario.groupby('Year').mean().drop(columns=['Date'])
-    return media_r_diario
+    media_anual = media_diaria_retornos(r_diario) * 252
+    return media_anual
 
-def contar_observaciones_anuales(r_diario):
+def desviacion_std_anual(r_diario):
     """
-    Cuenta el número de observaciones por año (D)
+    Estimación anual de la desviación estándar de retornos 
     """
-    obs_por_anno = r_diario.groupby('Year').size().reset_index(name='obs')
-    return obs_por_anno.set_index('Year')
+    var_diaria = r_diario.var()
+    var_anual = var_diaria * 252
+    std_anual = np.sqrt(var_anual) 
+    return std_anual
 
-def calcular_covarianza(x, y, year_column, year_obs):
+def covarianza_anual(r_diario):
     """
-    Calcula la covarianza diaria y anual entre dos activos.
+    Calcula la covarianza anual entre los activos.
     """
-    data = pd.DataFrame({'x': x, 'y': y, 'Year': year_column})
-    media_x = data.groupby('Year')['x'].mean()
-    media_y = data.groupby('Year')['y'].mean()
-
-    def cov_diaria(df):
-        return ((df['x'] - media_x[df.name]) * (df['y'] - media_y[df.name])).mean()
-
-    cov_diaria_por_anio = data.groupby('Year').apply(cov_diaria)
-    cov_anual_por_anio = cov_diaria_por_anio * year_obs['obs']
-
-    return pd.DataFrame({
-        'Covarianza_diaria': cov_diaria_por_anio,
-        'Covarianza_anual': cov_anual_por_anio
-    })
+    # Eliminar columna portafolio
+    r_diario = r_diario.drop(columns=['Portafolio'])
+    cov_diario = r_diario.cov()
+    cov_anual = cov_diario * 252
+    return cov_anual
 
 # %% Flujo principal
 def main():
@@ -80,28 +70,20 @@ def main():
     # Cálculo de rendimientos diarios
     r_diario = calcular_rendimientos_diarios(etf_data)
 
-    # Agregar información
-    r_diario = agregar_informacion(r_diario)
+    # Cálculo de media y desviación estándar anual
+    media_anual = calcular_media_anual(r_diario)
+    desviacion_anual = desviacion_std_anual(r_diario)
 
-    # Media y observaciones anuales
-    media_r_diario = calcular_media_anual(r_diario)
-    obs_por_anno = contar_observaciones_anuales(r_diario)
-
-    # Cálculo de covarianza
-    rendimientos_activo1 = r_diario['XLK']
-    rendimientos_activo2 = r_diario['XLV']
-    cov_result = calcular_covarianza(
-        rendimientos_activo1, 
-        rendimientos_activo2, 
-        r_diario['Year'], 
-        obs_por_anno
-    )
+    # Cálculo de covarianza anual
+    cov_anual = covarianza_anual(r_diario)
 
     # Resultados
     print("Media anual de rendimientos:")
-    print(media_r_diario)
-    print("\nCovarianza diaria y anual:")
-    print(cov_result)
+    print(media_anual)
+    print("\nDesviación estándar anual de rendimientos:")
+    print(desviacion_anual)
+    print("\nMatriz de covarianza anual de los rendimientos:")
+    print(cov_anual)
 
 if __name__ == "__main__":
     main()
