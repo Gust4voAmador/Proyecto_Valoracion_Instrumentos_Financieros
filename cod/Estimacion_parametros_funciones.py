@@ -115,11 +115,12 @@ def minimizar_varianza(media_objetivo, media_anual, cov_anual):
     """
     Minimiza la varianza del portafolio para un retorno deseado.
     """
-    # Asegurarse de que media_anual y cov_anual excluyen 'Portafolio'
-    media_anual = media_anual.drop('Portafolio')
+    # Verificar tamaños
+    media_anual = np.squeeze(np.asarray(media_anual))
+    
     n = len(media_anual)
     w0 = np.ones(n) / n  # Pesos iniciales iguales
-
+    
     # Restricciones: 1) Retorno deseado y 2) Suma de pesos igual a 1
     restricciones = (
         {'type': 'eq', 'fun': lambda w: np.sum(w) - 1},  # Suma de pesos = 1
@@ -137,8 +138,9 @@ def maximizar_retorno(varianza_objetivo, media_anual, cov_anual):
     """
     Maximiza el retorno del portafolio para una varianza deseada.
     """
-    # Asegurarse de que media_anual y cov_anual excluyen 'Portafolio'
-    media_anual = media_anual.drop('Portafolio')
+    # Verificar tamaños (se deja en forma vector y no matriz)
+    media_anual = np.squeeze(np.asarray(media_anual))
+    
     n = len(media_anual)
     w0 = np.ones(n) / n  # Pesos iniciales iguales
 
@@ -159,8 +161,8 @@ def minimizar2(esperado, media_anual, cov_anual, corto, activos):
     """
     Minimiza la varianza con venta en corto.
     """
-    # Quitar la columna portafolio
-    media_anual = media_anual.drop('Portafolio')
+    # Verificar tamaños
+    media_anual = np.squeeze(np.asarray(media_anual))
     
     # Función a minimizar
     def objetivo(pesos):
@@ -311,11 +313,9 @@ def capm(etfs, start_date, tasa_libre, pesos):
     # Rendimientos 
     r_mercado = calcular_rendimientos_diarios(mercado)
     r_diario = calcular_rendimientos_diarios(etf_data)
-    r_diario = r_diario.drop(columns=['Portafolio'])
-
     
     # Calcular los betas individuales con la pendiente de la regresión
-    betas = []
+    betas = [0,0]
     for activo in r_diario.columns:
         covarianza = np.cov(r_diario[activo], r_mercado["^GSPC"])[0, 1]
         var_mercado = np.var(r_mercado["^GSPC"])
@@ -323,7 +323,8 @@ def capm(etfs, start_date, tasa_libre, pesos):
         betas.append(beta)
         
     # Ver los betas
-    betas_df = pd.DataFrame({'Activo': r_diario.columns, 'Beta': betas})
+    activos = ["tasa libre", "tasa prestamo"] + list(r_diario.columns)
+    betas_df = pd.DataFrame({'Activo': activos, 'Beta': betas})
     
     # Beta del portafolio
     beta_port = np.dot(pesos, betas)
@@ -353,11 +354,11 @@ def main():
     r_diario = calcular_rendimientos_diarios(etf_data)
 
     # Cálculo de media y desviación estándar anual
-    media_anual = calcular_media_anual(r_diario)
+    media_anual = media_anual_ajuste(r_diario, 0.12, 0.15)
     desviacion_anual = desviacion_std_anual(r_diario)
 
     # Cálculo de covarianza anual
-    cov_anual = covarianza_anual(r_diario)
+    cov_anual = cov_anual_libre_prestamo(r_diario)
 
     # Primer método: minimizar la varianza dado un retorno deseado
     media_objetivo = 0.10  # Supongamos un retorno deseado del 10% anual
