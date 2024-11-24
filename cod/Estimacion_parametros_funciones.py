@@ -24,15 +24,18 @@ def calcular_rendimientos_diarios(etf_data):
     """
     r_diario = np.log(etf_data['Close'] / etf_data['Close'].shift(1))
     r_diario = pd.DataFrame(r_diario).dropna()  # Eliminar filas con valores NaN
-    r_diario['Portafolio'] = r_diario.sum(axis=1)
     return r_diario
 
 def media_diaria_retornos(r_diario):
     """
-    A partir de un df de rendimientos calcula media de activos y el portafolio
+    A partir de un df de rendimientos calcula la media de los activos, manteniendo los activos como columnas.
     """
     media_diaria = r_diario.mean()
-    return media_diaria
+    media_diaria_df = pd.DataFrame(media_diaria).T  # Convertir la serie resultante a DataFrame y transponer
+
+    #print(media_diaria_df)
+    return media_diaria_df
+
 
 def calcular_media_anual(r_diario):
     """
@@ -43,21 +46,68 @@ def calcular_media_anual(r_diario):
 
 def desviacion_std_anual(r_diario):
     """
-    Estimación anual de la desviación estándar de retornos 
+    Estimación anual de la desviación estándar de retornos.
     """
     var_diaria = r_diario.var()
     var_anual = var_diaria * 252
-    std_anual = np.sqrt(var_anual) 
+    std_anual = np.sqrt(var_anual)
     return std_anual
 
 def covarianza_anual(r_diario):
     """
-    Calcula la covarianza anual entre los activos, excluyendo la columna 'Portafolio'.
+    Calcula la covarianza anual entre los activos.
     """
-    r_diario = r_diario.drop(columns=['Portafolio'])  # Excluir columna 'Portafolio'
     cov_diario = r_diario.cov()
     cov_anual = cov_diario * 252
     return cov_anual
+
+def cov_anual_libre_prestamo(r_diario):
+    """
+    Calcula la covarianza considerando cero la libre de riesgo y pedir prestado
+    """
+    cov_anual = covarianza_anual(r_diario)
+    
+    # Crear un DataFrame con dos filas de ceros y el mismo número de columnas que df
+    filas_ceros = pd.DataFrame(np.zeros((2, cov_anual.shape[1])), columns=cov_anual.columns)
+    
+    # Concatenar el DataFrame de ceros al inicio del DataFrame original
+    cov_ajuste = pd.concat([filas_ceros, cov_anual], ignore_index=True)
+    
+    # Agregar columnas al inicio
+    cov_ajuste.insert(0, 'libre_riesgo', 0)  
+    cov_ajuste.insert(1, 'prestamo', 0)  
+    
+    return cov_ajuste
+
+def media_anual_ajuste(r_diario, tasa_libre, tasa_prestamo):
+    """
+    Calcula la media con la tasa libre de riesgo y la tasa de préstamo
+    """
+    media_anual_a = calcular_media_anual(r_diario)
+    # Insertar espacios con las tasas
+    media_anual_a.insert(0, 'libre_riesgo', tasa_libre)  
+    media_anual_a.insert(1, 'prestamo', tasa_prestamo)  
+    return media_anual_a
+
+#%%
+#Probar las funciones
+
+# Configuración
+etfs = ['XLK', 'XLV', 'XLF', 'EFA', 'VNQ', 'ICLN', 'JNK', 'LQD', 'DBC', 'VWO']
+start_date = '2010-01-01'
+
+# 1. Carga de datos
+print("Descargando datos históricos de ETFs...")
+etf_data = cargar_datos(etfs, start_date)
+
+# 2. Cálculo de rendimientos diarios
+print("Calculando rendimientos diarios...")
+r_diario = calcular_rendimientos_diarios(etf_data)
+
+cov_ajutada = cov_anual_libre_prestamo(r_diario)
+media_anual = calcular_media_anual(r_diario)
+media_diaria = media_diaria_retornos(r_diario)
+media_anual_param = media_anual_ajuste(r_diario, 0.12, 0.15)
 
 
 #%%
