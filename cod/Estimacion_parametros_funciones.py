@@ -8,6 +8,7 @@ Created on Sat Nov 23 19:06:25 2024
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import math
 from scipy.optimize import minimize
 
 # %% Métodos
@@ -154,6 +155,45 @@ def minimizar2(esperado, media_anual, cov_anual, corto, activos):
     )
 
     return resultado.x
+# %%MonteCarlo
+
+def simulacion_portafolio_montecarlo(pesos, retornos, S0, covarianza, num_simulaciones=1000, num_periodos=252):
+    """
+    Simula el rendimiento de un portafolio usando Monte Carlo y  a partir del movimiento browniano geométrico.
+    
+    Return:
+        retornos_simulados: np.ndarray
+            Array con los retornos simulados del portafolio al final del año.
+    """
+
+    # Ajuste de parámetros para la escala temporal (diaria en este caso)
+    retornos_diarios = retornos / num_periodos
+    covarianza_diaria = covarianza / num_periodos
+
+    # Descomposición de Cholesky para generar variables correlacionadas
+    L = np.linalg.cholesky(covarianza_diaria)
+
+    num_activos = len(pesos)
+    valores_portafolio = np.zeros(num_simulaciones)
+    retornos_simulados = np.zeros(num_simulaciones)
+
+    for sim in range(num_simulaciones):
+        precios = np.ones(num_activos) * S0  # Precios iniciales
+        for t in range(num_periodos):
+            # Generar ruido aleatorio correlacionado
+            z = np.random.normal(0, 1, num_activos)
+            variacion = retornos_diarios - 0.5 * np.diag(covarianza_diaria)
+            ruido_correlacionado = z @ L.T
+            # Actualizar precios
+            precios *= np.exp(variacion + ruido_correlacionado)
+
+        # Valor del portafolio al final
+        valores_portafolio[sim] = np.dot(pesos, precios)
+        retornos_simulados = math.log(valores_portafolio[sim]/S0)
+        
+
+    return retornos_simulados
+
 
 # %% Métricas
 
