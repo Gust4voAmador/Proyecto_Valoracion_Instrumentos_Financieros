@@ -8,6 +8,7 @@ Created on Sat Nov 23 19:06:25 2024
 import yfinance as yf
 import pandas as pd
 import numpy as np
+from scipy.optimize import minimize
 
 # %% Métodos
 def cargar_datos(etfs, start_date):
@@ -50,13 +51,58 @@ def desviacion_std_anual(r_diario):
 
 def covarianza_anual(r_diario):
     """
-    Calcula la covarianza anual entre los activos.
+    Calcula la covarianza anual entre los activos, excluyendo la columna 'Portafolio'.
     """
-    # Eliminar columna portafolio
-    r_diario = r_diario.drop(columns=['Portafolio'])
+    r_diario = r_diario.drop(columns=['Portafolio'])  # Excluir columna 'Portafolio'
     cov_diario = r_diario.cov()
     cov_anual = cov_diario * 252
     return cov_anual
+
+
+#%%
+def minimizar_varianza(media_objetivo, media_anual, cov_anual):
+    """
+    Minimiza la varianza del portafolio para un retorno deseado.
+    """
+    # Asegurarse de que media_anual y cov_anual excluyen 'Portafolio'
+    media_anual = media_anual.drop('Portafolio')
+    n = len(media_anual)
+    w0 = np.ones(n) / n  # Pesos iniciales iguales
+
+    # Restricciones: 1) Retorno deseado y 2) Suma de pesos igual a 1
+    restricciones = (
+        {'type': 'eq', 'fun': lambda w: np.sum(w) - 1},  # Suma de pesos = 1
+        {'type': 'eq', 'fun': lambda w: np.dot(w, media_anual) - media_objetivo}  # Retorno deseado
+    )
+
+    # Función objetivo: minimizar la varianza
+    def funcion_objetivo(w):
+        return np.dot(w.T, np.dot(cov_anual, w))
+
+    resultado = minimize(funcion_objetivo, w0, method='SLSQP', constraints=restricciones)
+    return resultado.x
+
+def maximizar_retorno(varianza_objetivo, media_anual, cov_anual):
+    """
+    Maximiza el retorno del portafolio para una varianza deseada.
+    """
+    # Asegurarse de que media_anual y cov_anual excluyen 'Portafolio'
+    media_anual = media_anual.drop('Portafolio')
+    n = len(media_anual)
+    w0 = np.ones(n) / n  # Pesos iniciales iguales
+
+    # Restricciones: 1) Varianza deseada y 2) Suma de pesos igual a 1
+    restricciones = (
+        {'type': 'eq', 'fun': lambda w: np.sum(w) - 1},  # Suma de pesos = 1
+        {'type': 'eq', 'fun': lambda w: np.dot(w.T, np.dot(cov_anual, w)) - varianza_objetivo}  # Varianza deseada
+    )
+
+    # Función objetivo: maximizar el retorno (equivalente a minimizar -retorno)
+    def funcion_objetivo(w):
+        return -np.dot(w, media_anual)
+
+    resultado = minimize(funcion_objetivo, w0, method='SLSQP', constraints=restricciones)
+    return resultado.x
 
 # %% Flujo principal
 def main():
@@ -77,13 +123,17 @@ def main():
     # Cálculo de covarianza anual
     cov_anual = covarianza_anual(r_diario)
 
-    # Resultados
-    print("Media anual de rendimientos:")
-    print(media_anual)
-    print("\nDesviación estándar anual de rendimientos:")
-    print(desviacion_anual)
-    print("\nMatriz de covarianza anual de los rendimientos:")
-    print(cov_anual)
+    # Primer método: minimizar la varianza dado un retorno deseado
+    media_objetivo = 0.10  # Supongamos un retorno deseado del 10% anual
+    pesos_min_var = minimizar_varianza(media_objetivo, media_anual, cov_anual)
+    print("\nPesos que minimizan la varianza dado un retorno deseado del 10%:")
+    print(pesos_min_var)
+
+    # Segundo método: maximizar el retorno dado una varianza deseada
+    varianza_objetivo = 0.05  # Supongamos una varianza deseada de 0.05
+    pesos_max_ret = maximizar_retorno(varianza_objetivo, media_anual, cov_anual)
+    print("\nPesos que maximizan el retorno dado una varianza deseada de 0.05:")
+    print(pesos_max_ret)
 
 if __name__ == "__main__":
     main()
