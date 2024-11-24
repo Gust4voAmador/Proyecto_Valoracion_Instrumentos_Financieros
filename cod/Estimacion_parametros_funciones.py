@@ -116,10 +116,10 @@ def minimizar2(esperado, media_anual, cov_anual, corto, activos):
     def rest_suma(pesos):
         return np.sum(pesos) - 1
 
-    restricciones = (
+    restricciones = [
         {'type': 'eq', 'fun': rest_esperado},  
-        {'type': 'eq', 'fun': rest_suma},       
-    )  # Target return constraint
+        {'type': 'eq', 'fun': rest_suma}       
+    ]  # Target return constraint
 
     
     if activos:
@@ -178,6 +178,14 @@ def main():
     pesos_max_ret = maximizar_retorno(varianza_objetivo, media_anual, cov_anual)
     print("\nPesos que maximizan el retorno dado una varianza deseada de 0.05:")
     print(pesos_max_ret)
-
+    
+    # Tercer método: minimizar con venta en corto y apalancamiento
+    esperado = 0.10
+    activos = {0: (0, None), # El activo 1 positivo
+               1: (-1, 0)} # El activo 2 negativo pero controlado
+    pesos_min_2 = minimizar2(esperado, media_anual, cov_anual, True, activos)
+    print("\nPesos que minimizan la varianza dado un retorno deseado del 10%:")
+    print(pesos_min_2)
+    
 if __name__ == "__main__":
     main()
