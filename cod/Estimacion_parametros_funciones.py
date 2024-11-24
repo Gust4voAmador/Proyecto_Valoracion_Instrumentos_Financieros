@@ -197,6 +197,53 @@ def simulacion_portafolio_montecarlo(pesos, retornos, S0, covarianza, num_simula
 
 # %% Métricas
 
+def sharpe_ratio(retorno_portafolio, tasa_libre, desviacion_portafolio):
+    """
+    Calcula el Sharpe Ratio.
+    """
+    return (retorno_portafolio - tasa_libre) / desviacion_portafolio
+
+
+def safety_first_ratio(retorno_portafolio, retorno_umbral, desviacion_portafolio):
+    """
+    Calcula el Roy's Safety First Ratio.
+    """
+    return (retorno_portafolio - retorno_umbral) / desviacion_portafolio
+
+
+def sortino_ratio(retorno_portafolio, tasa_libre, desviacion_downside):
+    """
+    Calcula el Sortino Ratio.
+    """
+    return (retorno_portafolio - tasa_libre) / desviacion_downside
+
+
+def treynor_ratio(retorno_portafolio, tasa_libre, beta_portafolio):
+    """
+    Calcula el Treynor Ratio.
+
+    """
+    return (retorno_portafolio - tasa_libre) / beta_portafolio
+
+
+def jensens_alpha(retorno_portafolio, etfs, start_date, tasa_libre, pesos):
+    """
+    Calcula el Jensen's Alpha.
+
+    Parámetros:
+    - retorno_portafolio: Retorno promedio del portafolio.
+    - tasa_libre: Retorno promedio libre de riesgo.
+    - beta_portafolio: Beta del portafolio.
+    - retorno_mercado: Retorno promedio del mercado.
+
+    Retorna:
+    - Jensen's Alpha.
+    """
+    CAPM = capm(etfs, start_date, tasa_libre, pesos)
+    retorno_esperado = CAPM['rend_port']
+    return retorno_portafolio - retorno_esperado
+
+
 def capm(etfs, start_date, tasa_libre, pesos):
     """
     Calcula el Capm del portafolio
