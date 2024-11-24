@@ -154,6 +154,51 @@ def minimizar2(esperado, media_anual, cov_anual, corto, activos):
     )
 
     return resultado.x
+
+# %% Métricas
+
+def capm(etfs, start_date, tasa_libre, pesos):
+    """
+    Calcula el Capm del portafolio
+    """
+    
+    # Cargar los datos del mercado 
+    mercado = cargar_datos("^GSPC", start_date)
+    
+    # Cargar los Etfs
+    etf_data = cargar_datos(etfs, start_date)
+    
+    # Rendimientos 
+    r_mercado = calcular_rendimientos_diarios(mercado)
+    r_diario = calcular_rendimientos_diarios(etf_data)
+    r_diario = r_diario.drop(columns=['Portafolio'])
+
+    
+    # Calcular los betas individuales con la pendiente de la regresión
+    betas = []
+    for activo in r_diario.columns:
+        covarianza = np.cov(r_diario[activo], r_mercado["^GSPC"])[0, 1]
+        var_mercado = np.var(r_mercado["^GSPC"])
+        beta = covarianza / var_mercado
+        betas.append(beta)
+        
+    # Ver los betas
+    betas_df = pd.DataFrame({'Activo': r_diario.columns, 'Beta': betas})
+    
+    # Beta del portafolio
+    beta_port = np.dot(pesos, betas)
+
+    # Prima de riesgo
+    prima_riesgo = r_mercado["^GSPC"].mean()*252 - tasa_libre
+
+    # Retorno esperado
+    rend_port = tasa_libre + beta_port * prima_riesgo
+    
+    return {
+        'betas': betas_df,
+        'beta_port': beta_port,
+        'rend_port': rend_port
+    }
     
 # %% Flujo principal
 def main():
@@ -193,6 +238,11 @@ def main():
     pesos_min_2 = minimizar2(esperado, media_anual, cov_anual, True, activos)
     print("\nPesos que minimizan la varianza dado un retorno deseado del 10%:")
     print(pesos_min_2)
+    
+    # Calculo de Capm y betas
+    result_capm = capm(etfs, start_date, 0.05, pesos_min_2)
+    print("\nResultados del Capm")
+    print(result_capm)
     
 if __name__ == "__main__":
     main()
