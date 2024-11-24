@@ -169,7 +169,10 @@ def simulacion_portafolio_montecarlo(pesos, retornos, S0, covarianza, num_simula
     # Ajuste de parámetros para la escala temporal (diaria en este caso)
     retornos_diarios = retornos / num_periodos
     covarianza_diaria = covarianza / num_periodos
-
+    
+    #Valor inicial del portafolio
+    valor_inicial_portafolio = np.dot(pesos, S0)
+    
     # Descomposición de Cholesky para generar variables correlacionadas
     L = np.linalg.cholesky(covarianza_diaria)
 
@@ -178,7 +181,7 @@ def simulacion_portafolio_montecarlo(pesos, retornos, S0, covarianza, num_simula
     retornos_simulados = np.zeros(num_simulaciones)
 
     for sim in range(num_simulaciones):
-        precios = np.ones(num_activos) * S0  # Precios iniciales
+        precios = S0  # Precios iniciales
         for t in range(num_periodos):
             # Generar ruido aleatorio correlacionado
             z = np.random.normal(0, 1, num_activos)
@@ -189,7 +192,7 @@ def simulacion_portafolio_montecarlo(pesos, retornos, S0, covarianza, num_simula
 
         # Valor del portafolio al final
         valores_portafolio[sim] = np.dot(pesos, precios)
-        retornos_simulados = math.log(valores_portafolio[sim]/S0)
+        retornos_simulados = math.log(valores_portafolio[sim]/valor_inicial_portafolio)
         
 
     return retornos_simulados
