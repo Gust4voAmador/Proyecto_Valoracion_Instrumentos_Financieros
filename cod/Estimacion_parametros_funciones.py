@@ -139,7 +139,7 @@ def minimizar2(esperado, media_anual, cov_anual, corto, activos):
     if corto:
         intervalo = [(-1, 1) for _ in range(len(media_anual))]  
     else:
-        intervalo = [(0, 2) for _ in range(len(media_anual))]   
+        intervalo = [(0, 1) for _ in range(len(media_anual))]   
 
     # Pesos iniciales
     iniciales = np.array([1 / len(media_anual)] * len(media_anual))
