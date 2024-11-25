@@ -391,23 +391,13 @@ def desviacion_downside(rendimientos_activos, pesos, rendimiento_objetivo=0):
     """
     primera_columna = np.full((rendimientos_activos.shape[0], 1), 0.043 / 12)
     segunda_columna = np.zeros((rendimientos_activos.shape[0], 1))
-    
-    # Agregar ambas columnas al inicio de la matriz
     rendimientos_activos= np.hstack((primera_columna, segunda_columna, rendimientos_activos))
-
-    # Calcular los rendimientos diarios del portafolio
     rendimientos_portafolio = np.dot(rendimientos_activos, pesos)
     
-    # Filtrar los rendimientos negativos respecto al rendimiento objetivo
+
     rendimientos_negativos = np.minimum(0, rendimientos_portafolio - rendimiento_objetivo)
-    
-    # Calcular la varianza downside diaria del portafolio
     varianza_downside_diaria = np.mean(rendimientos_negativos**2)
-    
-    # Desviación downside diaria
     desviacion_downside_diaria = np.sqrt(varianza_downside_diaria)
-    
-    # Anualizar la desviación downside
     desviacion_downside_anual = desviacion_downside_diaria * np.sqrt(252)
     
     return desviacion_downside_anual
