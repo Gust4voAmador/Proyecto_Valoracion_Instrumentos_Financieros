@@ -302,7 +302,7 @@ def simulacion_portafolio_montecarlo(pesos, retornos, S0, covarianza, num_simula
     - retornos_simulados: array con los retornos simulados del portafolio al final del año.
     - retornos_logaritmicos: matriz con los retornos logarítmicos diarios del portafolio.
     """
-    
+    random.seed(123)
     # Ajuste de parámetros para la escala temporal (diaria en este caso)
     retornos_diarios = retornos / num_periodos
     covarianza_diaria = covarianza / num_periodos
@@ -373,6 +373,48 @@ def sortino_ratio(retorno_portafolio, tasa_libre, desviacion_downside):
     return (retorno_portafolio - tasa_libre) / desviacion_downside
 
 
+def desviacion_downside(rendimientos_activos, pesos, rendimiento_objetivo=0):
+    """
+    Calcula la desviación downside anualizada del portafolio.
+    
+    Parámetros:
+    rendimientos_activos: array-like
+        Matriz de rendimientos diarios de los activos (cada columna es un activo).
+    pesos: array-like
+        Pesos de los activos en el portafolio. Deben sumar aproximadamente 1.
+    rendimiento_objetivo: float, opcional
+        Rendimiento objetivo diario (por defecto es 0).
+        
+    Retorna:
+    float
+        La desviación downside anualizada del portafolio.
+    """
+    primera_columna = np.full((rendimientos_activos.shape[0], 1), 0.043 / 12)
+    segunda_columna = np.zeros((rendimientos_activos.shape[0], 1))
+    
+    # Agregar ambas columnas al inicio de la matriz
+    rendimientos_activos= np.hstack((primera_columna, segunda_columna, rendimientos_activos))
+
+    # Calcular los rendimientos diarios del portafolio
+    rendimientos_portafolio = np.dot(rendimientos_activos, pesos)
+    
+    # Filtrar los rendimientos negativos respecto al rendimiento objetivo
+    rendimientos_negativos = np.minimum(0, rendimientos_portafolio - rendimiento_objetivo)
+    
+    # Calcular la varianza downside diaria del portafolio
+    varianza_downside_diaria = np.mean(rendimientos_negativos**2)
+    
+    # Desviación downside diaria
+    desviacion_downside_diaria = np.sqrt(varianza_downside_diaria)
+    
+    # Anualizar la desviación downside
+    desviacion_downside_anual = desviacion_downside_diaria * np.sqrt(252)
+    
+    return desviacion_downside_anual
+
+
+
+
 def treynor_ratio(retorno_portafolio, tasa_libre, beta_portafolio):
     """
     Calcula el Treynor Ratio.
@@ -412,7 +454,9 @@ def capm(etfs, start_date, tasa_libre, pesos):
     
     # Rendimientos 
     r_mercado = calcular_rendimientos_diarios(mercado)
+    r_mercado = r_mercado.head(3494)
     r_diario = calcular_rendimientos_diarios(etf_data)
+    r_diario = r_diario.head(3494)
     
     # Calcular los betas individuales con la pendiente de la regresión
     betas = [0,0]
@@ -730,5 +774,68 @@ plt.show()
 #result_capm = capm(etfs, start_date, 0.05, pesos_min_2)
 #print("\nResultados del Capm")
 #print(result_capm)
+
+
+#MÉTRICAS
+
+#Sharpe Ratio
+sharpe_con = sharpe_ratio(media_1, 0.043, desv_1)
+sharpe_mod = sharpe_ratio(media_2, 0.043, desv_2)
+sharpe_agr = sharpe_ratio(media_3, 0.043, desv_3)
+
+#Roy's safety first ratio
+#el mínimo de rendimiento es 1% menos del esperado
+roy_con = safety_first_ratio(media_1, 0.05, desv_1)
+roy_mod = safety_first_ratio(media_2, 0.07, desv_2)
+roy_agr = safety_first_ratio(media_3, 0.011, desv_3)
+
+#Sortino Radio
+#Calculo de la desviacion downside con tasa objetivo la libre de riesgo
+desv_down_1 = desviacion_downside(r_diario, pesos_cons, 0.048/12)
+desv_down_2 = desviacion_downside(r_diario, pesos_mod, 0.048/12)
+desv_down_3 = desviacion_downside(r_diario, pesos_agr, 0.048/12)
+
+
+sortino_con = sortino_ratio(media_1, 0.043, desv_down_1)
+sortino_mod = sortino_ratio(media_2, 0.043, desv_down_1)
+sortino_agr = sortino_ratio(media_3, 0.043, desv_down_1)
+
+#Treynor Ratio
+
+capm_1 = capm(etfs, start_date, 0.043, pesos_cons)
+capm_2 = capm(etfs, start_date, 0.043, pesos_cons)
+capm_3 = capm(etfs, start_date, 0.043, pesos_cons)
+
+
+treynor_con = treynor_ratio(media_1, 0.043, capm_1['beta_port'])
+treynor_mod = treynor_ratio(media_2, 0.043, capm_1['beta_port'])
+treynor_agr = treynor_ratio(media_3, 0.043, capm_1['beta_port'])
+
+#Jensen's alpha
+
+jensen_con = jensens_alpha(media_1, etfs, start_date, 0.043, pesos_cons)
+jensen_mod = jensens_alpha(media_2, etfs, start_date, 0.043, pesos_mod)
+jensen_agr = jensens_alpha(media_3, etfs, start_date, 0.043, pesos_agr)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
