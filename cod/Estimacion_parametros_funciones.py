@@ -278,7 +278,7 @@ def minimizar2(esperado, media_anual, cov_anual, activos):
 
 # %% Montecarlo
 
-def simulacion_portafolio_montecarlo(pesos, retornos, S0, covarianza, num_simulaciones=1000, num_periodos=252, inversion_inicial=1000000):
+def simulacion_portafolio_montecarlo(pesos, retornos, S0, covarianza, num_simulaciones=1000, num_periodos=252, inversion_inicial=100000):
     """
     Simula el rendimiento de un portafolio usando Monte Carlo y a partir del movimiento browniano geométrico.
     Los primeros activos son determinísticos y su rendimiento se calcula directamente.
@@ -303,7 +303,7 @@ def simulacion_portafolio_montecarlo(pesos, retornos, S0, covarianza, num_simula
     
     # Valor inicial del portafolio (invertimos una cantidad inicial en cada activo según sus pesos)
     valor_inicial_portafolio = inversion_inicial
-    
+
     # Descomposición de Cholesky para generar variables correlacionadas solo para activos estocásticos
     L = np.linalg.cholesky(covarianza_diaria.iloc[2:, 2:].values)  # Solo para activos estocásticos, los primeros dos activos no se simulan
     
@@ -317,6 +317,7 @@ def simulacion_portafolio_montecarlo(pesos, retornos, S0, covarianza, num_simula
     # Simulaciones de Monte Carlo
     for sim in range(num_simulaciones):
         precios = np.copy(S0)  # Precios iniciales
+        precio_anterior = np.copy(precios)
         
         for t in range(1, num_periodos):
             # Para los primeros dos activos determinísticos, actualizamos sus precios con sus retornos
@@ -329,14 +330,16 @@ def simulacion_portafolio_montecarlo(pesos, retornos, S0, covarianza, num_simula
             ruido_correlacionado = z @ L.T
             precios[2:] *= np.exp(variacion + ruido_correlacionado)
             
-            # Valor del portafolio en el tiempo t
-            portafolio[t, sim] = portafolio[t-1, sim] + np.dot(pesos, precios)
-    
+            retorno_dia = np.dot(pesos, (precios / precio_anterior - 1))  # Retorno ponderado del portafolio
+            precio_anterior = np.copy(precios)
+            portafolio[t, sim] = portafolio[t-1, sim] * (1+ retorno_dia)
+
         # Calculando los retornos logaritmicos diarios para cada simulación
         retornos_diarios_sim[:, sim] = np.diff(np.log(portafolio[:, sim]))
-    
+
     # Calculando los retornos anuales a partir del primer y último valor del portafolio
-    retornos_anuales = np.log(portafolio[-1, :] / portafolio[0, :]) * num_periodos
+    retornos_anuales = np.log(portafolio[-1, :] / inversion_inicial)
+
     
     return portafolio, retornos_diarios_sim, retornos_anuales
 
@@ -543,7 +546,7 @@ print(f"Retorno Esperado: {media_3}")
 
 # Obtener la última observación de los precios 
 S0 = etf_data.iloc[-1].values  
-S0 = np.insert(S0, 0, [1, 1])
+S0 = np.insert(S0, 0, [100000, 100000])
 print(S0)
 
 
@@ -614,22 +617,98 @@ percentil_005 = np.percentile(valores_finales, 5)
 percentil_05 = np.percentile(valores_finales, 50)
 percentil_095 = np.percentile(valores_finales, 95)
 
-# Seleccionar las simulaciones cuyos valores finales están en los percentiles seleccionados
-simulacion_percentil_005 = portafolio_simulado_cons[:, valores_finales <= percentil_005][:, 0]
-simulacion_percentil_05 = portafolio_simulado_cons[:, (valores_finales >= percentil_05 - 1e-6) & (valores_finales <= percentil_05 + 1e-6)]
-simulacion_percentil_095 = portafolio_simulado_cons[:, valores_finales >= percentil_095][0]
+# Extraemos el índice de la simulación más cercana a cada percentil
+indice_percentil_005 = np.argmin(np.abs(valores_finales - percentil_005))
+indice_percentil_05 = np.argmin(np.abs(valores_finales - percentil_05))
+indice_percentil_095 = np.argmin(np.abs(valores_finales - percentil_095))
 
+# Extraemos las simulaciones correspondientes
+simulacion_percentil_005 = portafolio_simulado_cons[:, indice_percentil_005]
+simulacion_percentil_05 = portafolio_simulado_cons[:, indice_percentil_05]
+simulacion_percentil_095 = portafolio_simulado_cons[:, indice_percentil_095]
 
 # Graficamos la evolución de las simulaciones seleccionadas
 plt.figure(figsize=(10, 6))
 
-# Graficar las tres simulaciones
-plt.plot(simulacion_percentil_005, label='Simulación Percentil 0.05', color='red', linestyle='--', linewidth=2)
-plt.plot(simulacion_percentil_05, label='Simulación Percentil 0.5', color='blue', linewidth=2)
-plt.plot(simulacion_percentil_095, label='Simulación Percentil 0.95', color='green', linestyle='--', linewidth=2)
+plt.plot(simulacion_percentil_005, label='Simulación Percentil 5%', color='red', linestyle='--', linewidth=2)
+plt.plot(simulacion_percentil_05, label='Simulación Percentil 50%', color='blue', linewidth=2)
+plt.plot(simulacion_percentil_095, label='Simulación Percentil 95%', color='green', linestyle='--', linewidth=2)
 
 # Etiquetas y título
-plt.title('Evolución del portafolio conservador (Percentiles 0.05, 0.5, 0.95)', fontsize=16)
+plt.title('Evolución del portafolio conservador (Percentiles 5%, 50%, 95%)', fontsize=16)
+plt.xlabel('Tiempo (Días)', fontsize=14)
+plt.ylabel('Valor del Portafolio', fontsize=14)
+
+# Leyenda
+plt.legend()
+
+# Mostrar el gráfico
+plt.show()
+
+# Extraemos el valor final de cada simulación (última fila)
+valores_finales = portafolio_simulado_mod[-1]
+
+# Calculamos los percentiles de los valores finales
+percentil_005 = np.percentile(valores_finales, 5)
+percentil_05 = np.percentile(valores_finales, 50)
+percentil_095 = np.percentile(valores_finales, 95)
+
+# Extraemos el índice de la simulación más cercana a cada percentil
+indice_percentil_005 = np.argmin(np.abs(valores_finales - percentil_005))
+indice_percentil_05 = np.argmin(np.abs(valores_finales - percentil_05))
+indice_percentil_095 = np.argmin(np.abs(valores_finales - percentil_095))
+
+# Extraemos las simulaciones correspondientes
+simulacion_percentil_005 = portafolio_simulado_mod[:, indice_percentil_005]
+simulacion_percentil_05 = portafolio_simulado_mod[:, indice_percentil_05]
+simulacion_percentil_095 = portafolio_simulado_mod[:, indice_percentil_095]
+
+# Graficamos la evolución de las simulaciones seleccionadas
+plt.figure(figsize=(10, 6))
+
+plt.plot(simulacion_percentil_005, label='Simulación Percentil 5%', color='red', linestyle='--', linewidth=2)
+plt.plot(simulacion_percentil_05, label='Simulación Percentil 50%', color='blue', linewidth=2)
+plt.plot(simulacion_percentil_095, label='Simulación Percentil 95%', color='green', linestyle='--', linewidth=2)
+
+# Etiquetas y título
+plt.title('Evolución del portafolio moderado (Percentiles 5%, 50%, 95%)', fontsize=16)
+plt.xlabel('Tiempo (Días)', fontsize=14)
+plt.ylabel('Valor del Portafolio', fontsize=14)
+
+# Leyenda
+plt.legend()
+
+# Mostrar el gráfico
+plt.show()
+
+
+# Extraemos el valor final de cada simulación (última fila)
+valores_finales = portafolio_simulado_agr[-1]
+
+# Calculamos los percentiles de los valores finales
+percentil_005 = np.percentile(valores_finales, 5)
+percentil_05 = np.percentile(valores_finales, 50)
+percentil_095 = np.percentile(valores_finales, 95)
+
+# Extraemos el índice de la simulación más cercana a cada percentil
+indice_percentil_005 = np.argmin(np.abs(valores_finales - percentil_005))
+indice_percentil_05 = np.argmin(np.abs(valores_finales - percentil_05))
+indice_percentil_095 = np.argmin(np.abs(valores_finales - percentil_095))
+
+# Extraemos las simulaciones correspondientes
+simulacion_percentil_005 = portafolio_simulado_agr[:, indice_percentil_005]
+simulacion_percentil_05 = portafolio_simulado_agr[:, indice_percentil_05]
+simulacion_percentil_095 = portafolio_simulado_agr[:, indice_percentil_095]
+
+# Graficamos la evolución de las simulaciones seleccionadas
+plt.figure(figsize=(10, 6))
+
+plt.plot(simulacion_percentil_005, label='Simulación Percentil 5%', color='red', linestyle='--', linewidth=2)
+plt.plot(simulacion_percentil_05, label='Simulación Percentil 50%', color='blue', linewidth=2)
+plt.plot(simulacion_percentil_095, label='Simulación Percentil 95%', color='green', linestyle='--', linewidth=2)
+
+# Etiquetas y título
+plt.title('Evolución del portafolio agresivo (Percentiles 5%, 50%, 95%)', fontsize=16)
 plt.xlabel('Tiempo (Días)', fontsize=14)
 plt.ylabel('Valor del Portafolio', fontsize=14)
 
