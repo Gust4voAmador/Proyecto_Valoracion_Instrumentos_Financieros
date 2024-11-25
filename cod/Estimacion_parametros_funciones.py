@@ -551,7 +551,7 @@ print(f"Desviación Estándar: {desv_3:.2f}%")
 print(f"Retorno Esperado: {media_3}")
 
 # Obtener la última observación de los precios 
-S0 = etf_data.iloc[-1].values  
+S0 = etf_data.iloc[-2].values  
 S0 = np.insert(S0, 0, [100000, 100000])
 print(S0)
 
