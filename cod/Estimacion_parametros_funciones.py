@@ -184,9 +184,14 @@ def minimizar2(esperado, media_anual, cov_anual, corto, activos):
     # Agregar restricciones segun activos especificos
     if activos:
         for indice, (cota_inf, cota_sup) in activos.items():
-            restricciones.append({'type': 'ineq', 'fun': lambda pesos, i=indice: pesos[i] - cota_inf})
-            if cota_sup is not None:
-                restricciones.append({'type': 'ineq', 'fun': lambda pesos, i=indice: cota_inf - pesos[i]})
+            if cota_inf == cota_sup and cota_sup is not None:
+                # Poner el valor estricto
+                restricciones.append({'type': 'eq', 'fun': lambda pesos, i=indice: pesos[i] - cota_inf})
+            else:
+                # Para un rango
+                restricciones.append({'type': 'ineq', 'fun': lambda pesos, i=indice: pesos[i] - cota_inf})
+                if cota_sup is not None:
+                    restricciones.append({'type': 'ineq', 'fun': lambda pesos, i=indice: cota_sup - pesos[i]})
 
     # Si se vende en corto se permite el endeudamiento
     if corto:
@@ -399,9 +404,9 @@ print(pesos_mod)
 # Portafolio Agresivo
 esp_agr = 0.12
 activos_agr = {0: (0, None), # La tasa libre sin cota
-           1: (-0.8, 0)} # EPermitir el apalancamiento
+           1: (-0.8, 0)} # Permitir el apalancamiento
 pesos_agr = minimizar2(esp_agr, media_anual, cov_anual, True, activos_agr)
-print("\nPesos que minimizan la varianza dado un retorno deseado del 10%:")
+print("\nPesos que optimizan un portafolio agresivo:")
 print(pesos_agr)
 
 # Calculo de Capm y betas
