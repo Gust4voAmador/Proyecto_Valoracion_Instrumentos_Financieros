@@ -93,21 +93,21 @@ def media_anual_ajuste(r_diario, tasa_libre, tasa_prestamo):
 #Probar las funciones
 
 # Configuración
-etfs = ['XLK', 'XLV', 'XLF', 'EFA', 'VNQ', 'ICLN', 'JNK', 'LQD', 'DBC', 'VWO']
-start_date = '2010-01-01'
+#etfs = ['XLK', 'XLV', 'XLF', 'EFA', 'VNQ', 'ICLN', 'JNK', 'LQD', 'DBC', 'VWO']
+#start_date = '2010-01-01'
 
 # 1. Carga de datos
-print("Descargando datos históricos de ETFs...")
-etf_data = cargar_datos(etfs, start_date)
+#print("Descargando datos históricos de ETFs...")
+#etf_data = cargar_datos(etfs, start_date)
 
 # 2. Cálculo de rendimientos diarios
-print("Calculando rendimientos diarios...")
-r_diario = calcular_rendimientos_diarios(etf_data)
+#print("Calculando rendimientos diarios...")
+#r_diario = calcular_rendimientos_diarios(etf_data)
 
-cov_ajutada = cov_anual_libre_prestamo(r_diario)
-media_anual = calcular_media_anual(r_diario)
-media_diaria = media_diaria_retornos(r_diario)
-media_anual_param = media_anual_ajuste(r_diario, 0.12, 0.15)
+#cov_ajutada = cov_anual_libre_prestamo(r_diario)
+#media_anual = calcular_media_anual(r_diario)
+#media_diaria = media_diaria_retornos(r_diario)
+#media_anual_param = media_anual_ajuste(r_diario, 0.12, 0.15)
 
 
 #%%
@@ -342,48 +342,71 @@ def capm(etfs, start_date, tasa_libre, pesos):
     }
     
 # %% Flujo principal
-def main():
-    # Configuración
-    etfs = ['XLK', 'XLV', 'XLF', 'EFA', 'VNQ', 'ICLN', 'JNK', 'LQD', 'DBC', 'VWO']
-    start_date = '2010-01-01'
 
-    # Carga de datos
-    etf_data = cargar_datos(etfs, start_date)
+# Configuración
+etfs = ['XLK', 'XLV', 'XLF', 'EFA', 'VNQ', 'ICLN', 'JNK', 'LQD', 'DBC', 'VWO']
+start_date = '2010-01-01'
 
-    # Cálculo de rendimientos diarios
-    r_diario = calcular_rendimientos_diarios(etf_data)
+# Carga de datos
+etf_data = cargar_datos(etfs, start_date)
 
-    # Cálculo de media y desviación estándar anual
-    media_anual = media_anual_ajuste(r_diario, 0.12, 0.15)
-    desviacion_anual = desviacion_std_anual(r_diario)
+# Cálculo de rendimientos diarios
+r_diario = calcular_rendimientos_diarios(etf_data)
 
-    # Cálculo de covarianza anual
-    cov_anual = cov_anual_libre_prestamo(r_diario)
+# Cálculo de media y desviación estándar anual
+media_anual = media_anual_ajuste(r_diario, 0.043, 0.0531)
+desviacion_anual = desviacion_std_anual(r_diario)
 
-    # Primer método: minimizar la varianza dado un retorno deseado
-    media_objetivo = 0.10  # Supongamos un retorno deseado del 10% anual
-    pesos_min_var = minimizar_varianza(media_objetivo, media_anual, cov_anual)
-    print("\nPesos que minimizan la varianza dado un retorno deseado del 10%:")
-    print(pesos_min_var)
+# Cálculo de covarianza anual
+cov_anual = cov_anual_libre_prestamo(r_diario)
 
-    # Segundo método: maximizar el retorno dado una varianza deseada
-    varianza_objetivo = 0.05  # Supongamos una varianza deseada de 0.05
-    pesos_max_ret = maximizar_retorno(varianza_objetivo, media_anual, cov_anual)
-    print("\nPesos que maximizan el retorno dado una varianza deseada de 0.05:")
-    print(pesos_max_ret)
-    
-    # Tercer método: minimizar con venta en corto y apalancamiento
-    esperado = 0.10
-    activos = {0: (0, None), # El activo 1 positivo
-               1: (-1, 0)} # El activo 2 negativo pero controlado
-    pesos_min_2 = minimizar2(esperado, media_anual, cov_anual, True, activos)
-    print("\nPesos que minimizan la varianza dado un retorno deseado del 10%:")
-    print(pesos_min_2)
-    
-    # Calculo de Capm y betas
-    result_capm = capm(etfs, start_date, 0.05, pesos_min_2)
-    print("\nResultados del Capm")
-    print(result_capm)
-    
-if __name__ == "__main__":
-    main()
+# Portafolio Conservador 
+esp_cons = 0.05
+activos_cons = {0: (0, None), # La tasa libre sin cota
+           1: (0, 0), # No permitir apalancamiento
+           2: (0, 0.2), # Limitar el resto de activos a no más de un 20%
+           3: (0, 0.2),
+           4: (0, 0.2),
+           5: (0, 0.2),
+           6: (0, 0.2),
+           7: (0, 0.2),
+           8: (0, 0.2),
+           9: (0, 0.2),
+           10: (0, 0.2),
+           11: (0, 0.2)} 
+pesos_cons = minimizar2(esp_cons, media_anual, cov_anual, False, activos_cons)
+print("\nPesos que optimizan un portafolio conservador:")
+print(pesos_cons)
+
+# Portafolio Moderado 
+esp_mod = 0.07
+activos_mod = {0: (0, None), # La tasa libre sin cota
+           1: (0, 0), # No permitir apalancamiento
+           2: (0, 0.3), # Limitar el resto de activos a no más de un 30%
+           3: (0, 0.3),
+           4: (0, 0.3),
+           5: (0, 0.3),
+           6: (0, 0.3),
+           7: (0, 0.3),
+           8: (0, 0.3),
+           9: (0, 0.3),
+           10: (0, 0.3),
+           11: (0, 0.3)} 
+pesos_mod = minimizar2(esp_mod, media_anual, cov_anual, False, activos_mod)
+print("\nPesos que optimizan un portafolio moderado:")
+print(pesos_mod)
+
+# Portafolio Agresivo
+esp_agr = 0.12
+activos_agr = {0: (0, None), # La tasa libre sin cota
+           1: (-0.8, 0)} # EPermitir el apalancamiento
+pesos_agr = minimizar2(esp_agr, media_anual, cov_anual, True, activos_agr)
+print("\nPesos que minimizan la varianza dado un retorno deseado del 10%:")
+print(pesos_agr)
+
+# Calculo de Capm y betas
+#result_capm = capm(etfs, start_date, 0.05, pesos_min_2)
+#print("\nResultados del Capm")
+#print(result_capm)
+
+
