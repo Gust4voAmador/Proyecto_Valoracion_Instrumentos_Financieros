@@ -4,7 +4,8 @@ Created on Sat Nov 23 19:06:25 2024
 
 @author: AMADOR
 """
-
+import matplotlib.pyplot as plt
+import seaborn as sns
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -13,17 +14,20 @@ from scipy.optimize import minimize
 
 # %% Métodos
 def cargar_datos(etfs, start_date):
-    """
-    Descarga los datos históricos de una lista de ETFs desde Yahoo Finance.
-    """
-    return yf.download(etfs, start=start_date)
+    # Carga de los datos usando yfinance
+    data = yf.download(etfs, start=start_date)['Adj Close']
+    return data
 
 def calcular_rendimientos_diarios(etf_data):
     """
     Calcula los rendimientos logarítmicos diarios de los ETFs.
     """
-    r_diario = np.log(etf_data['Close'] / etf_data['Close'].shift(1))
-    r_diario = pd.DataFrame(r_diario).dropna()  # Eliminar filas con valores NaN
+    # Calculamos los rendimientos logarítmicos diarios
+    r_diario = np.log(etf_data / etf_data.shift(1))
+    
+    # Eliminamos cualquier fila con valores NaN (por el shift)
+    r_diario = r_diario.dropna()  
+    
     return r_diario
 
 def media_diaria_retornos(r_diario):
@@ -88,6 +92,51 @@ def media_anual_ajuste(r_diario, tasa_libre, tasa_prestamo):
     media_anual_a.insert(0, 'libre_riesgo', tasa_libre)  
     media_anual_a.insert(1, 'prestamo', tasa_prestamo)  
     return media_anual_a
+
+def calcular_varianza_portafolio(pesos, cov_anual):
+    """
+    Calcula la varianza del portafolio dado un vector de pesos y la matriz de covarianza.
+    
+    Parámetros:
+    - pesos: Vector de pesos de los activos en el portafolio.
+    - cov_anual: Matriz de covarianza anual de los activos.
+    
+    Retorna:
+    - Varianza del portafolio.
+    """
+    return np.dot(pesos.T, np.dot(cov_anual, pesos))
+
+def calcular_retorno_esperado_portafolio(pesos, media_anual):
+    """
+    Calcula el retorno esperado del portafolio dado un vector de pesos y el vector de retornos esperados.
+    
+    Parámetros:
+    - pesos: Vector de pesos de los activos en el portafolio.
+    - media_anual: Vector de retornos esperados de los activos.
+    
+    Retorna:
+    - Retorno esperado del portafolio.
+    """
+    media_anual = np.squeeze(np.asarray(media_anual))
+    return np.dot(pesos, media_anual)
+
+def calcular_desviacion_estandar(pesos, cov_anual):
+    """
+    Calcula la desviación estándar (volatilidad) del portafolio en porcentaje.
+
+    Parámetros:
+    - pesos: Vector de pesos del portafolio.
+    - cov_anual: Matriz de covarianza de los activos.
+
+    Retorna:
+    - La desviación estándar del portafolio en porcentaje.
+    """
+    # Calcular la desviación estándar del portafolio
+    desviacion_estandar = np.sqrt(np.dot(pesos.T, np.dot(cov_anual, pesos)))
+    
+    # Convertir a porcentaje (multiplicando por 100)
+    return desviacion_estandar * 100
+
 
 #%%
 #Probar las funciones
@@ -157,102 +206,139 @@ def maximizar_retorno(varianza_objetivo, media_anual, cov_anual):
     resultado = minimize(funcion_objetivo, w0, method='SLSQP', constraints=restricciones)
     return resultado.x
 
-def minimizar2(esperado, media_anual, cov_anual, corto, activos):
+
+def minimizar2(esperado, media_anual, cov_anual, activos):
     """
-    Minimiza la varianza con venta en corto.
+    Minimiza la varianza del portafolio con restricciones específicas para activos.
+
+    Parámetros:
+    - esperado: Retorno esperado del portafolio.
+    - media_anual: Vector de rendimientos esperados de los activos.
+    - cov_anual: Matriz de covarianza anual de los activos.
+    - activos: Diccionario con restricciones específicas para activos.
+               Formato: {indice: (cota_inferior, cota_superior)}.
     """
-    # Verificar tamaños
     media_anual = np.squeeze(np.asarray(media_anual))
-    
-    # Función a minimizar
+
+    # Función objetivo: minimizar la varianza del portafolio
     def objetivo(pesos):
         return np.dot(pesos.T, np.dot(cov_anual, pesos))
-    
-    # Verificar llegar al retorno esperado
+
+    # Restricción: el retorno esperado del portafolio debe ser igual al objetivo
     def rest_esperado(pesos):
         return np.dot(pesos, media_anual) - esperado
-    
-    # Verificar que sume 1
+
+    # Restricción: la suma de los pesos debe ser igual a 1
     def rest_suma(pesos):
         return np.sum(pesos) - 1
 
+    # Crear lista de restricciones
     restricciones = [
-        {'type': 'eq', 'fun': rest_esperado},  
-        {'type': 'eq', 'fun': rest_suma}       
-    ]  
+        {'type': 'eq', 'fun': rest_esperado},
+        {'type': 'eq', 'fun': rest_suma}
+    ]
 
-    # Agregar restricciones segun activos especificos
-    if activos:
-        for indice, (cota_inf, cota_sup) in activos.items():
-            if cota_inf == cota_sup and cota_sup is not None:
-                # Poner el valor estricto
-                restricciones.append({'type': 'eq', 'fun': lambda pesos, i=indice: pesos[i] - cota_inf})
-            else:
-                # Para un rango
-                restricciones.append({'type': 'ineq', 'fun': lambda pesos, i=indice: pesos[i] - cota_inf})
-                if cota_sup is not None:
-                    restricciones.append({'type': 'ineq', 'fun': lambda pesos, i=indice: cota_sup - pesos[i]})
+    # Agregar restricciones para cada activo
+    limites = []
+    for indice, (cota_inf, cota_sup) in activos.items():
+        if cota_inf is None:
+            cota_inf = -np.inf  # Sin límite inferior
+        if cota_sup is None:
+            cota_sup = np.inf  # Sin límite superior
+        limites.append((cota_inf, cota_sup))
 
-    # Si se vende en corto se permite el endeudamiento
-    if corto:
-        intervalo = [(-1, 2) for _ in range(len(media_anual))]  
-    else:
-        intervalo = [(0, 2) for _ in range(len(media_anual))]   
-
-    # Pesos iniciales
+    # Pesos iniciales (distribución uniforme)
     iniciales = np.array([1 / len(media_anual)] * len(media_anual))
 
-    # Resultados
+    # Optimización con límites en lugar de restricciones lambda
     resultado = minimize(
         objetivo,
         iniciales,
         method='SLSQP',
-        bounds=intervalo,
-        constraints=restricciones
+        constraints=restricciones,
+        bounds=limites,  # Aplicar directamente las restricciones de los activos
+        options={
+            'disp': True,
+            'ftol': 1e-9
+        }
     )
 
-    return resultado.x
-# %%MonteCarlo
+    if not resultado.success:
+        raise ValueError(f"Optimización fallida: {resultado.message}")
 
-def simulacion_portafolio_montecarlo(pesos, retornos, S0, covarianza, num_simulaciones=1000, num_periodos=252):
-    """
-    Simula el rendimiento de un portafolio usando Monte Carlo y  a partir del movimiento browniano geométrico.
     
-    Return:
-        retornos_simulados: np.ndarray
-            Array con los retornos simulados del portafolio al final del año.
-    """
+    # Redondear pesos a 4 decimales
+    pesos_redondeados = np.round(resultado.x, 4)
 
+    # Normalizar para que sumen exactamente 1
+    pesos_normalizados = pesos_redondeados / np.sum(pesos_redondeados)
+
+
+    return pesos_normalizados
+
+# %% Montecarlo
+
+def simulacion_portafolio_montecarlo(pesos, retornos, S0, covarianza, num_simulaciones=1000, num_periodos=252, inversion_inicial=1000000):
+    """
+    Simula el rendimiento de un portafolio usando Monte Carlo y a partir del movimiento browniano geométrico.
+    Los primeros activos son determinísticos y su rendimiento se calcula directamente.
+    
+    Parametros:
+    - pesos: array con los pesos de cada activo en el portafolio.
+    - retornos: DataFrame o array con los retornos esperados de los activos.
+    - S0: array con los precios iniciales de los activos.
+    - covarianza: matriz de covarianza de los activos.
+    - num_simulaciones: número de simulaciones a realizar.
+    - num_periodos: número de períodos (días de negociación en el año, generalmente 252).
+    - inversion_inicial: valor inicial de la inversión (por ejemplo, 1,000,000).
+    
+    Retorna:
+    - retornos_simulados: array con los retornos simulados del portafolio al final del año.
+    - retornos_logaritmicos: matriz con los retornos logarítmicos diarios del portafolio.
+    """
+    
     # Ajuste de parámetros para la escala temporal (diaria en este caso)
     retornos_diarios = retornos / num_periodos
     covarianza_diaria = covarianza / num_periodos
     
-    #Valor inicial del portafolio
-    valor_inicial_portafolio = np.dot(pesos, S0)
+    # Valor inicial del portafolio (invertimos una cantidad inicial en cada activo según sus pesos)
+    valor_inicial_portafolio = inversion_inicial
     
-    # Descomposición de Cholesky para generar variables correlacionadas
-    L = np.linalg.cholesky(covarianza_diaria)
-
+    # Descomposición de Cholesky para generar variables correlacionadas solo para activos estocásticos
+    L = np.linalg.cholesky(covarianza_diaria.iloc[2:, 2:].values)  # Solo para activos estocásticos, los primeros dos activos no se simulan
+    
     num_activos = len(pesos)
-    valores_portafolio = np.zeros(num_simulaciones)
-    retornos_simulados = np.zeros(num_simulaciones)
-
+    
+    # Inicialización de la matriz para almacenar los valores del portafolio
+    portafolio = np.zeros((num_periodos, num_simulaciones))  # Matriz para el valor del portafolio en cada simulación y periodo
+    portafolio[0] = valor_inicial_portafolio  # Establecemos el valor inicial
+    retornos_diarios_sim = np.zeros((num_periodos-1, num_simulaciones))
+    
+    # Simulaciones de Monte Carlo
     for sim in range(num_simulaciones):
-        precios = S0  # Precios iniciales
-        for t in range(num_periodos):
-            # Generar ruido aleatorio correlacionado
-            z = np.random.normal(0, 1, num_activos)
-            variacion = retornos_diarios - 0.5 * np.diag(covarianza_diaria)
-            ruido_correlacionado = z @ L.T
-            # Actualizar precios
-            precios *= np.exp(variacion + ruido_correlacionado)
-
-        # Valor del portafolio al final
-        valores_portafolio[sim] = np.dot(pesos, precios)
-        retornos_simulados = math.log(valores_portafolio[sim]/valor_inicial_portafolio)
+        precios = np.copy(S0)  # Precios iniciales
         
-
-    return retornos_simulados
+        for t in range(1, num_periodos):
+            # Para los primeros dos activos determinísticos, actualizamos sus precios con sus retornos
+            precios[0] *= np.exp(retornos_diarios[0])  # Primer activo determinístico
+            precios[1] *= np.exp(retornos_diarios[1])  # Segundo activo determinístico
+            
+            # Para los activos estocásticos (de la tercera posición en adelante), aplicamos el movimiento browniano
+            z = np.random.normal(0, 1, num_activos - 2)  # Ruido aleatorio solo para los activos estocásticos
+            variacion = retornos_diarios[2:] - 0.5 * np.diag(covarianza_diaria.iloc[2:, 2:].values)  # Actualizamos la variación para los activos estocásticos
+            ruido_correlacionado = z @ L.T
+            precios[2:] *= np.exp(variacion + ruido_correlacionado)
+            
+            # Valor del portafolio en el tiempo t
+            portafolio[t, sim] = portafolio[t-1, sim] + np.dot(pesos, precios)
+    
+        # Calculando los retornos logaritmicos diarios para cada simulación
+        retornos_diarios_sim[:, sim] = np.diff(np.log(portafolio[:, sim]))
+    
+    # Calculando los retornos anuales a partir del primer y último valor del portafolio
+    retornos_anuales = np.log(portafolio[-1, :] / portafolio[0, :]) * num_periodos
+    
+    return portafolio, retornos_diarios_sim, retornos_anuales
 
 
 # %% Métricas
@@ -349,8 +435,8 @@ def capm(etfs, start_date, tasa_libre, pesos):
 # %% Flujo principal
 
 # Configuración
-etfs = ['XLK', 'XLV', 'XLF', 'EFA', 'VNQ', 'VWO', 'VOO', 'IBB', 'SMH', 'GLD', 'XLY', 'IEV', 'IYE', 'AIA', 'XRT', 'FEZ']
-start_date = '2010-01-01'
+etfs = ['XLK', 'XLV', 'XLF', 'VNQ', 'VOO', 'IBB', 'SMH', 'GLD', 'XLY', 'IYE', 'AIA', 'XRT']
+start_date = '2011-01-01'
 
 # Carga de datos
 etf_data = cargar_datos(etfs, start_date)
@@ -366,8 +452,28 @@ desviacion_anual = desviacion_std_anual(r_diario)
 cov_anual = cov_anual_libre_prestamo(r_diario)
 
 # Portafolio Conservador 
-esp_cons = 0.05
+esp_cons = 0.06
 activos_cons = {0: (0, None), # La tasa libre sin cota
+           1: (0, 0), # No permitir apalancamiento
+           2: (0, 0.1), # Limitar el resto de activos a no más de un 10%
+           3: (0, 0.1),
+           4: (0, 0.1),
+           5: (0, 0.1),
+           6: (0, 0.1),
+           7: (0, 0.1),
+           8: (0, 0.1),
+           9: (0, 0.1),
+           10: (0, 0.1),
+           11: (0, 0.1),
+           12: (0, 0.1),
+           13: (0, 0.1)} 
+pesos_cons = minimizar2(esp_cons, media_anual, cov_anual, activos_cons)
+print("\nPesos que optimizan un portafolio conservador:")
+print(pesos_cons)
+
+# Portafolio Moderado 
+esp_mod = 0.08
+activos_mod = {0: (0, None), # La tasa libre sin cota
            1: (0, 0), # No permitir apalancamiento
            2: (0, 0.2), # Limitar el resto de activos a no más de un 20%
            3: (0, 0.2),
@@ -378,36 +484,162 @@ activos_cons = {0: (0, None), # La tasa libre sin cota
            8: (0, 0.2),
            9: (0, 0.2),
            10: (0, 0.2),
-           11: (0, 0.2)} 
-pesos_cons = minimizar2(esp_cons, media_anual, cov_anual, False, activos_cons)
-print("\nPesos que optimizan un portafolio conservador:")
-print(pesos_cons)
-
-# Portafolio Moderado 
-esp_mod = 0.07
-activos_mod = {0: (0, None), # La tasa libre sin cota
-           1: (0, 0), # No permitir apalancamiento
-           2: (0, 0.3), # Limitar el resto de activos a no más de un 30%
-           3: (0, 0.3),
-           4: (0, 0.3),
-           5: (0, 0.3),
-           6: (0, 0.3),
-           7: (0, 0.3),
-           8: (0, 0.3),
-           9: (0, 0.3),
-           10: (0, 0.3),
-           11: (0, 0.3)} 
-pesos_mod = minimizar2(esp_mod, media_anual, cov_anual, False, activos_mod)
+           11: (0, 0.2),
+           12: (0, 0.2),
+           13: (0, 0.2)} 
+pesos_mod = minimizar2(esp_mod, media_anual, cov_anual, activos_mod)
 print("\nPesos que optimizan un portafolio moderado:")
 print(pesos_mod)
 
-# Portafolio Agresivo
+
+
+# Portafolio agresivo
 esp_agr = 0.12
 activos_agr = {0: (0, None), # La tasa libre sin cota
-           1: (-0.8, 0)} # Permitir el apalancamiento
-pesos_agr = minimizar2(esp_agr, media_anual, cov_anual, True, activos_agr)
+           1: (-0.8, 0),
+           2: (-0.15, 0.3),
+           3: (-0.15, 0.3),
+           4: (-0.15, 0.3),
+           5: (-0.15, 0.3),
+           6: (-0.15, 0.3),
+           7: (-0.15, 0.3),
+           8: (-0.15, 0.3),
+           9: (-0.15, 0.3),
+           10: (-0.15, 0.3),
+           11: (-0.15, 0.3),
+           12: (-0.15, 0.3),
+           13: (-0.15, 0.3)} 
+           
+pesos_agr = minimizar2(esp_agr, media_anual, cov_anual, activos_agr)
 print("\nPesos que optimizan un portafolio agresivo:")
 print(pesos_agr)
+
+
+
+# Portafolio conservador
+desv_1 = calcular_desviacion_estandar(pesos_cons, cov_anual)
+media_1 = calcular_retorno_esperado_portafolio(pesos_cons, media_anual)
+
+# Portafolio moderado
+desv_2 = calcular_desviacion_estandar(pesos_mod, cov_anual)
+media_2 = calcular_retorno_esperado_portafolio(pesos_mod, media_anual)
+
+# Portafolio agresivo
+desv_3 = calcular_desviacion_estandar(pesos_agr, cov_anual)
+media_3 = calcular_retorno_esperado_portafolio(pesos_agr, media_anual)
+
+# Imprimir los resultados
+print("Resultados del Portafolio Conservador:")
+print(f"Desviación Estándar: {desv_1:.2f}%")
+print(f"Retorno Esperado: {media_1}\n")
+
+print("Resultados del Portafolio Moderado:")
+print(f"Desviación Estándar: {desv_2:.2f}%")
+print(f"Retorno Esperado: {media_2}\n")
+
+print("Resultados del Portafolio Agresivo:")
+print(f"Desviación Estándar: {desv_3:.2f}%")
+print(f"Retorno Esperado: {media_3}")
+
+# Obtener la última observación de los precios 
+S0 = etf_data.iloc[-1].values  
+S0 = np.insert(S0, 0, [1, 1])
+print(S0)
+
+
+simulacion_cons = simulacion_portafolio_montecarlo(pesos_cons, media_anual.values[0], S0, cov_anual)
+
+
+simulacion_mod = simulacion_portafolio_montecarlo(pesos_mod, media_anual.values[0], S0, cov_anual)
+
+
+simulacion_agr = simulacion_portafolio_montecarlo(pesos_agr, media_anual.values[0], S0, cov_anual)
+
+
+portafolio_simulado_mod = simulacion_mod[0]
+portafolio_simulado_cons = simulacion_cons[0]
+portafolio_simulado_agr = simulacion_agr[0]
+
+retornos_anuales_cons = simulacion_cons[2]
+retornos_anuales_mod = simulacion_mod[2]
+retornos_anuales_agr = simulacion_agr[2]
+
+
+#GRÁFICOS DE DISTRIBUCIONES DE RETORNOS ANUALES PARA CADA PORTAFOLIO
+
+
+plt.figure(figsize=(10, 6))
+sns.histplot(retornos_anuales_cons, kde=True, color='blue', bins=30)  # Histograma con KDE
+
+# Etiquetas y título
+plt.title('Distribución de retornos anuales para portafolio conservador ', fontsize=16)
+plt.xlabel('Retorno Anual Logarítmico', fontsize=14)
+plt.ylabel('Frecuencia', fontsize=14)
+
+# Mostrar el gráfico
+plt.show()
+
+
+plt.figure(figsize=(10, 6))
+sns.histplot(retornos_anuales_mod, kde=True, color='blue', bins=30)  # Histograma con KDE
+
+# Etiquetas y título
+plt.title('Distribución de retornos anuales para portafolio moderado ', fontsize=16)
+plt.xlabel('Retorno Anual Logarítmico', fontsize=14)
+plt.ylabel('Frecuencia', fontsize=14)
+
+# Mostrar el gráfico
+plt.show()
+
+
+plt.figure(figsize=(10, 6))
+sns.histplot(retornos_anuales_agr, kde=True, color='blue', bins=30)  # Histograma con KDE
+
+# Etiquetas y título
+plt.title('Distribución de retornos anuales para portafolio agresivo ', fontsize=16)
+plt.xlabel('Retorno Anual Logarítmico', fontsize=14)
+plt.ylabel('Frecuencia', fontsize=14)
+
+# Mostrar el gráfico
+plt.show()
+
+
+#GRÁFICOS DE EVOLUCIÓN DE PORTAFOLIO POR PERCENTILES
+
+# Extraemos el valor final de cada simulación (última fila)
+valores_finales = portafolio_simulado_cons[-1]
+
+# Calculamos los percentiles de los valores finales
+percentil_005 = np.percentile(valores_finales, 5)
+percentil_05 = np.percentile(valores_finales, 50)
+percentil_095 = np.percentile(valores_finales, 95)
+
+# Seleccionar las simulaciones cuyos valores finales están en los percentiles seleccionados
+simulacion_percentil_005 = portafolio_simulado_cons[:, valores_finales <= percentil_005][:, 0]
+simulacion_percentil_05 = portafolio_simulado_cons[:, (valores_finales >= percentil_05 - 1e-6) & (valores_finales <= percentil_05 + 1e-6)]
+simulacion_percentil_095 = portafolio_simulado_cons[:, valores_finales >= percentil_095][0]
+
+
+# Graficamos la evolución de las simulaciones seleccionadas
+plt.figure(figsize=(10, 6))
+
+# Graficar las tres simulaciones
+plt.plot(simulacion_percentil_005, label='Simulación Percentil 0.05', color='red', linestyle='--', linewidth=2)
+plt.plot(simulacion_percentil_05, label='Simulación Percentil 0.5', color='blue', linewidth=2)
+plt.plot(simulacion_percentil_095, label='Simulación Percentil 0.95', color='green', linestyle='--', linewidth=2)
+
+# Etiquetas y título
+plt.title('Evolución del portafolio conservador (Percentiles 0.05, 0.5, 0.95)', fontsize=16)
+plt.xlabel('Tiempo (Días)', fontsize=14)
+plt.ylabel('Valor del Portafolio', fontsize=14)
+
+# Leyenda
+plt.legend()
+
+# Mostrar el gráfico
+plt.show()
+
+
 
 # Calculo de Capm y betas
 #result_capm = capm(etfs, start_date, 0.05, pesos_min_2)
