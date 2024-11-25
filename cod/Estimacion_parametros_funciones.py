@@ -10,7 +10,12 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import math
+import random
 from scipy.optimize import minimize
+
+
+#Se establece la semilla
+random.seed(123)
 
 # %% Métodos
 def cargar_datos(etfs, start_date):
@@ -293,6 +298,7 @@ def simulacion_portafolio_montecarlo(pesos, retornos, S0, covarianza, num_simula
     - inversion_inicial: valor inicial de la inversión (por ejemplo, 1,000,000).
     
     Retorna:
+    - portafolio:  matriz con los valores del portafolio
     - retornos_simulados: array con los retornos simulados del portafolio al final del año.
     - retornos_logaritmicos: matriz con los retornos logarítmicos diarios del portafolio.
     """
