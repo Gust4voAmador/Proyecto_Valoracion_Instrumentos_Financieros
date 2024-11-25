@@ -349,7 +349,7 @@ def capm(etfs, start_date, tasa_libre, pesos):
 # %% Flujo principal
 
 # Configuración
-etfs = ['XLK', 'XLV', 'XLF', 'EFA', 'VNQ', 'ICLN', 'JNK', 'LQD', 'DBC', 'VWO']
+etfs = ['XLK', 'XLV', 'XLF', 'EFA', 'VNQ', 'VWO', 'VOO', 'IBB', 'SMH', 'GLD', 'XLY', 'IEV', 'IYE', 'AIA', 'XRT', 'FEZ']
 start_date = '2010-01-01'
 
 # Carga de datos
